@@ -19,6 +19,12 @@ pop (Stack [] _) = Nothing
 peek (Stack (s:_) _) = Just s
 peek (Stack [] _)  = Nothing
 
+-- TODO: universal quantification
+-- TODO: proper subtyping
+-- TODO: algebraic datatypes
+
+-- TODO: fix possible runtime errors.  they are regarding universal quantification.
+
 -- Primitive types correspond directly to the typedefs in C file (except for RF, CF).
 data P = I32 | I64 | F32 | F64 | AI32 | AI64 | AF32 | AF64
        | O deriving (Show,Eq,Enum)
@@ -26,14 +32,17 @@ data RT = RI | RF32 | RFUN deriving (Show,Eq)
 
 data TG = TG { name :: String, supertypes :: [T], subtypes :: [T], aliases :: [T] } deriving (Show,Eq)
 data V = V String T deriving (Show,Eq)
-data T = P String | Var String | SF (Stack T) (Stack T) | Forall [V] T | U deriving (Show,Eq)
+data T = P String | Var String | SF (Stack T) (Stack T) | Forall [V] T
+       | Error | U deriving (Show,Eq)
 data L = CL String T | Err String | RL String RT deriving (Show,Eq)
 
 --Type `Any' is considered to have all types as subtypes and none as supertypes.
 types_init = [TG "Any" [] [] [], TG "Num" [] [P "I32"] [P "F32"]
              ,TG "Int" [P "Num"] [] [], TG "F32" [P "Num"] [] []]
-funs_init = [CL "pop" (SF (Stack [P "Any"] 1) (Stack [] 0))]
-finit_defs = [("pop",(\(Stack (s:xs) sz) -> Stack xs (sz-1)))]
+funs_init = [CL "drop" (Forall [V "a" (P "Any")] (SF (Stack [Var "a"] 1) (Stack [] 0)))
+            ,CL "swap" (SF (Stack [P "Any", P "Any"] 2) (Stack [P "Any",P "Any"] 2))]
+finit_defs = [("drop",(\(Stack (s:xs) sz) -> Stack xs (sz-1)))
+             ,("swap",(\(Stack (sa:sb:xs) sz) -> Stack (sb:sa:xs) sz))]
 
 make_type :: DT.Text -> L
 make_type l = case (readMaybe (DT.unpack l) :: Maybe Int, readMaybe (DT.unpack l) :: Maybe Float) of
@@ -46,17 +55,33 @@ make_type l = case (readMaybe (DT.unpack l) :: Maybe Int, readMaybe (DT.unpack l
 make_types :: [DT.Text] -> [L]
 make_types = map make_type
 
+-- NOTE: probably better to include Forall in type-checking.
 parse :: [L] -> Stack L
 parse = foldl (\st@(Stack s sz) cl@(CL ll lt) ->
   case lt of
-    SF a b -> exec_fun ll $ type_check st a
-    _      -> push cl st) st_init
+    sa@(SF a b) -> exec_fun ll $ type_check st sa
+    f@(Forall vs sf) -> exec_fun ll $ type_check st f
+    _           -> push cl st) st_init
 
 -- TODO: improve type mismatch error.
-type_check :: Stack L -> Stack T -> Stack L
-type_check st@(Stack a n) (Stack b _) =
-  if all (\(CL ll lt,t) -> lt `is_subtype` t) $ zip a b
+type_check :: Stack L -> T -> Stack L
+type_check st@(Stack a n) (SF (Stack b _) _) =
+  if length a >= length b && (all (\(CL ll lt,t) -> lt `is_subtype` t) $ zip a b)
   then st else Stack ((Err "type mismatch."):a) (n+1)
+type_check st f = type_check st $ univ_quantify f
+
+univ_quantify :: T -> T
+univ_quantify (Forall vs t) = univ_quantify' vs t
+
+univ_quantify' :: [V] -> T -> T
+univ_quantify' vs (Var v) = case find (\(V a t) -> a==v) vs of
+  Just (V _ t) -> t
+  Nothing      -> Error
+-- TODO: make only one recursive call.
+univ_quantify' vs (SF (Stack a na) (Stack b nb)) =
+  SF (Stack (map (univ_quantify' vs) a) na) (Stack (map (univ_quantify' vs) b) nb)
+univ_quantify' vs (Forall vs' t) = univ_quantify $ Forall (vs++vs') t
+univ_quantify' vs p = p
 
 is_subtype :: T -> T -> Bool
 -- TODO: find way to do commutativity.
