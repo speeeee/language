@@ -20,6 +20,8 @@ peek (Stack (s:_) _) = Just s
 peek (Stack [] _)  = Nothing
 
 -- TODO: universal quantification
+-- TODO: functions that will be compiled rather than run immediately (needs type checking for
+--     :   stack function result)
 -- TODO: proper subtyping
 -- TODO: algebraic datatypes
 
@@ -55,7 +57,8 @@ make_type l = case (readMaybe (DT.unpack l) :: Maybe Int, readMaybe (DT.unpack l
 make_types :: [DT.Text] -> [L]
 make_types = map make_type
 
--- NOTE: probably better to include Forall in type-checking.
+-- TODO: merge lexing and parsing so that newly defined functions are lexed correctly on the
+--     : first pass.
 parse :: [L] -> Stack L
 parse = foldl (\st@(Stack s sz) cl@(CL ll lt) ->
   case lt of
@@ -68,7 +71,21 @@ type_check :: Stack L -> T -> Stack L
 type_check st@(Stack a n) (SF (Stack b _) _) =
   if length a >= length b && (all (\(CL ll lt,t) -> lt `is_subtype` t) $ zip a b)
   then st else Stack ((Err "type mismatch."):a) (n+1)
-type_check st f = type_check st $ univ_quantify f
+type_check st f = univ_check st f
+
+univ_check :: Stack L -> T -> Stack L
+univ_check st (Forall vs t) = univ_check' st vs t
+
+univ_check' :: Stack L -> [V] -> T -> Stack L
+univ_check' st@(Stack a _) vs (SF (Stack b _) (Stack c _)) =
+  let vs' = foldr (\(ka,vb) vss -> check1 ka vss vb) vs $ zip a b
+  in if length a < length b then push (Err "stack underflow") st
+     else st
+
+-- TODO: better error handling
+check1 :: L -> [V] -> T -> [V]
+check1 (CL a t') vs (Var v) =
+  map (\(V n t) -> if n==v && t' `is_subtype` t then V n t' else V n t) vs
 
 univ_quantify :: T -> T
 univ_quantify (Forall vs t) = univ_quantify' vs t
