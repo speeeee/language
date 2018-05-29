@@ -1,6 +1,7 @@
 module Lexer where
 
 import Data.Char
+import Data.Functor.Identity
 import Data.Maybe (fromMaybe)
 import Control.Applicative (some)
 
@@ -17,7 +18,8 @@ import Text.Parsec.Language (emptyDef)
 data Expr = Mon Expr Expr | Dyad Expr Expr Expr
           | Tup [Expr]
           | Arr [Expr] 
-          | I String | F String | Ident String | OpIdent String | ParseErr deriving (Show,Eq)
+          | I String | F String | Ident String | OpIdent String
+          | Fun String | ParseErr deriving (Show,Eq)
 
 lexer = makeTokenParser emptyDef
 
@@ -29,15 +31,17 @@ integerp = do
   whiteSpace lexer
   return $ I $ s++cs
 
-floatp :: Parser Expr
-floatp = do
+-- TODO: add notation for exponents.
+int_floatp :: Parser Expr
+int_floatp = do
   whiteSpace lexer
   s <- string "-" <|> return []
-  cs <- many digit
-  dec <- string "."
-  ds <- some digit
+  cs <- some digit
+  dec <- optionMaybe $ string "."
+  q <- case dec of (Just a) -> do { ds <- some digit; return $ F $ s++cs++a++ds; }
+                   Nothing  -> do { return $ I $ s++cs; }
   whiteSpace lexer
-  return $ F $ s++cs++dec++ds
+  return q
 
 listp :: Parser Expr -> Parser Expr
 listp q = do
@@ -52,21 +56,30 @@ identp = do
   cs <- many $ alphaNum <|> oneOf "_"
   return $ Ident $ [s]++cs
 
+op_ident_parser :: ParsecT String u Data.Functor.Identity.Identity String
+op_ident_parser = foldr1 (<|>) $ map string ["+","-","*","/","^","<=",">=","<",">","=","=:"]
+
 -- NOTE: there should be a shorter way of representing this.
 op_identp :: Parser Expr
 op_identp = do
-  s <- foldr1 (<|>) $ map string ["+","-","*","/","^","<=",">=","<",">","=","=:"]
+  s <- op_ident_parser
   return $ OpIdent s
+
+funp :: Parser Expr
+funp = do
+  s <- char '\''
+  f <- (some $ alphaNum <|> oneOf "_") <|> op_ident_parser
+  return $ Fun f
 
 expr :: Parser Expr
 expr = factor `chainl1` dyad
 
 dyad = do
-  q <- op_identp
+  q <- op_identp <|> identp
   return $ Dyad q
 
 factor :: Parser Expr
-factor = listp floatp <|> listp integerp <|> parens lexer expr
+factor = listp int_floatp <|> listp funp <|> parens lexer expr
 
 run :: String -> Expr
 run = either (\_ -> ParseErr) id . runParser expr () "out"
