@@ -26,7 +26,7 @@ lexer = makeTokenParser emptyDef
 integerp :: Parser Expr
 integerp = do
   whiteSpace lexer
-  s <- string "-" <|> return []
+  s <- string "_" <|> return []
   cs <- some digit
   whiteSpace lexer
   return $ I $ s++cs
@@ -35,7 +35,7 @@ integerp = do
 int_floatp :: Parser Expr
 int_floatp = do
   whiteSpace lexer
-  s <- string "-" <|> return []
+  s <- string "_" <|> return []
   cs <- some digit
   dec <- optionMaybe $ string "."
   q <- case dec of (Just a) -> do { ds <- some digit; return $ F $ s++cs++a++ds; }
@@ -72,11 +72,16 @@ funp = do
   return $ Fun f
 
 expr :: Parser Expr
-expr = factor `chainl1` dyad
+expr = (do { q <- mon; e <- expr; return $ q e; }) <|> factor `chainr1` dyad
 
+dyad :: Parser (Expr -> Expr -> Expr)
 dyad = do
   q <- op_identp <|> identp
   return $ Dyad q
+mon :: Parser (Expr -> Expr)
+mon = do
+  q <- op_identp <|> identp
+  return $ Mon q
 
 factor :: Parser Expr
 factor = listp int_floatp <|> listp funp <|> parens lexer expr
