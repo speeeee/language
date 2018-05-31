@@ -13,6 +13,8 @@ import Text.Parsec.Language (emptyDef)
 
 -- partially adapted from Write You a Haskell by Stephen Diehl.
 
+-- TODO: make parser converting AST to TypeStack.
+
 -- NOTE: definitely not made optimally.
 --data Prim = I String | F String | Ident String | OpIdent String deriving (Show,Eq)
 data Expr = Mon Expr Expr | Dyad Expr Expr Expr

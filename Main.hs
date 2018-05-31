@@ -6,16 +6,16 @@ import qualified Data.Text as DT
 import Lexer
 import TypeStack
 
-{-main :: IO ()
-main = forever $ do
-  putStr "> "
-  hFlush stdout
-  putStrLn $ show $ P "I32" `is_subtype` P "Num"
-  show <$> (parse <$> make_types <$> DT.words <$> TIO.getLine) >>= putStrLn-}
-
 main :: IO ()
 main = forever $ do
   putStr "> "
   hFlush stdout
+  show <$> (parse (LS types_init funs_init st_init) <$> make_types <$> DT.words <$> TIO.getLine)
+    >>= putStrLn
+
+{-main :: IO ()
+main = forever $ do
+  putStr "> "
+  hFlush stdout
   c <- getLine
-  putStrLn $ show $ run c
+  putStrLn $ show $ run c-}
