@@ -130,7 +130,6 @@ is_subtype :: [TG] -> T -> T -> Bool
 -- TODO: find way to do commutativity.
 is_subtype _ _ (P "Any") = True
 is_subtype _ (P "Any") _ = False
--- Assume single parent for now.  ignore subtypes for now.
 is_subtype tg pa@(P a) pb@(P b) = a==b
   || maybe False (any (\k -> is_subtype tg k pb)) (let a = supertypes <$> find (\q -> name q==pa) tg in trace (show a) a)
 
